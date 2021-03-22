@@ -134,13 +134,13 @@ macro document*(constName: untyped, body: untyped): untyped =
                 case flagType:
                 of fkString:
                   searchBody.add quote do:
-                    if `pIdent`.key == `flagName`:
+                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
                       if `pident`.val.len > 0:
                           let strVal = `pident`.val
                           `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, strVal: strVal).some
                 of fkInt:
                   searchBody.add quote do:
-                    if `pIdent`.key == `flagName`:
+                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
                       if `pident`.val.len > 0:
                         try:
                           let intVal = `pIdent`.val.`flagParser`
@@ -148,7 +148,7 @@ macro document*(constName: untyped, body: untyped): untyped =
                         except: discard
                 of fkFloat:
                   searchBody.add quote do:
-                    if `pIdent`.key == `flagName`:
+                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
                         try:
                           let floatVal = `pIdent`.val.`flagParser`
                           `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, floatVal: floatVal).some
@@ -159,7 +159,7 @@ macro document*(constName: untyped, body: untyped): untyped =
                   flagName = $flag
                 flags.add flagName.toFlag
                 searchbody.add quote do:
-                  if `pident`.key == `flagName`:
+                  if `pident`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
                     `resIdent`[`name`] = FlagValue(kind: fkNone).some
 
           if field[0].eqIdent("desc"): # Found the section description

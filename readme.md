@@ -5,9 +5,11 @@ Commander is a easy to use CLI documenter and parser.
 ```nim
 import commander
 document(FancyProgram):
-  header: "This program does some fancy thing."
-  footer: "Released under MIT license."
+  header: "This program does some fancy thing." # At start of documentation
+  footer: "Released under MIT license." # At end of documentation
   section Main:
+    header: "Main Section:" # At start of section
+    footer: "Cool stuff!" # At end of section
     Help: # This emits an enum value apart of `FancyProgramEnum.Help`
       flags:
         h

@@ -26,4 +26,3 @@ and really sweet code."""
         gc: string
     footer:
       "This really is some silly stuff"
-writeFile("index.html", CommanderDoc.toHtml)

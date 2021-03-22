@@ -17,6 +17,8 @@ document(FancyProgram):
       c: int # Can use `float`, `int` or `string`
       count: int
 
+writeFile("index.html", FancyProgram) # Outputs the Doc as a HTML file
+
 if FancyProgramFlags[Help].isSome: # If the value was parsed it's `some`
   FancyProgram.print() # Prints the CLI documentation
 

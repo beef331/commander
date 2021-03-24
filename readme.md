@@ -29,12 +29,12 @@ document(FancyProgram):
 
 writeFile("index.html", FancyProgramDoc.toHtml) # Outputs the Doc as a HTML file
 
-FancyProgramFlags.expectThen(Help, fkNone): # We only expect an empty value for help
+FancyProgramFlags.hasThen(Help, fkNone): # We only expect an empty value for help
   FancyProgramDoc.print() # Prints the CLI documentation
 
 let
   hasColor = block:
-    FancyProgramFlags.expectThenElse(EnableColor, fkNone):
+    FancyProgramFlags.hasThenElse(EnableColor, fkNone):
       true  # Flag was included so must be true!
     do:
       false # Flag was missing so must be false!
@@ -44,7 +44,7 @@ let
     else:
       "Hello World"
   messageCount = block:
-    FancyProgramFlags.expectThenElse(Count, fkInt):
+    FancyProgramFlags.hasThenElse(Count, fkInt):
       it    # It is injected by getting the value
     do:
       3

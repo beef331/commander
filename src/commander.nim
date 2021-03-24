@@ -184,7 +184,7 @@ macro document*(constName: untyped, body: untyped): untyped =
           break
       `resIdent`
 
-template expectThen*[E, T](flags: array[E, T], key: E, expectKind: static FlagKind,
+template hasThen*[E, T](flags: array[E, T], key: E, expectKind: static FlagKind,
     body: untyped): untyped =
   ## If the `key` matches the expected `kind` the body is invoked
   ## Useful for toggling values.
@@ -196,7 +196,7 @@ template expectThen*[E, T](flags: array[E, T], key: E, expectKind: static FlagKi
     elif expectKind == fkString:
       let it{.inject.} = doc[key].get.strVal
     body
-template expectThenElse*[E, T](doc: array[E, T], key: E, expectKind: static FlagKind, body,
+template hasThenElse*[E, T](doc: array[E, T], key: E, expectKind: static FlagKind, body,
     elseBody: untyped): untyped =
   ## Template to make it easier to unpack the values.
   ## Injects an `it` if the kind is not `fkNone`.

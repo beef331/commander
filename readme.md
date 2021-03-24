@@ -16,13 +16,15 @@ document(FancyProgram):
         help
       desc: "Prints this message"
     Count:
-      c: int # Can use `float`, `int` or `string`
-      count: int
+      desc: "Prints hellow world COUNT times."
+      flags:
+        c: int # Can use `float`, `int` or `string`
+        count: int
 
-writeFile("index.html", FancyProgram) # Outputs the Doc as a HTML file
+writeFile("index.html", FancyProgramDoc.toHtml) # Outputs the Doc as a HTML file
 
 if FancyProgramFlags[Help].isSome: # If the value was parsed it's `some`
-  FancyProgram.print() # Prints the CLI documentation
+  FancyProgramDoc.print() # Prints the CLI documentation
 
 if FancyProgramFlags[Count].isSome:
   if FancyProgramFlags[Count].get.kind == fkInt:

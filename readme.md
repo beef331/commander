@@ -4,6 +4,7 @@ Commander is a easy to use CLI documenter and parser.
 ## How to use
 ```nim
 import commander
+import std/terminal
 document(FancyProgram):
   header: "This program does some fancy thing." # At start of documentation
   footer: "Released under MIT license." # At end of documentation
@@ -20,18 +21,34 @@ document(FancyProgram):
       flags:
         c: int # Can use `float`, `int` or `string`
         count: int
+    EnableColor:
+      desc: "Enables terminal colour which makes the messages red."
+      flags:
+        color
+        cc
 
 writeFile("index.html", FancyProgramDoc.toHtml) # Outputs the Doc as a HTML file
 
-if FancyProgramFlags[Help].isSome: # If the value was parsed it's `some`
+FancyProgramFlags.expectThen(Help, fkNone): # We only expect an empty value for help
   FancyProgramDoc.print() # Prints the CLI documentation
 
-if FancyProgramFlags[Count].isSome:
-  if FancyProgramFlags[Count].get.kind == fkInt:
-    for x in 0..<FancyProgramFlags[Count].get.intVal:
-      echo "Hello World"
-  else:
-    for x in 0..<3: # Default value sorta.
-      echo "Hello World"
+let
+  hasColor = block:
+    FancyProgramFlags.expectThenElse(EnableColor, fkNone):
+      true  # Flag was included so must be true!
+    do:
+      false # Flag was missing so must be false!
+  message =
+    if hasColor:
+      ansiForegroundColorCode(fgRed) & "Hello World" & ansiResetCode
+    else:
+      "Hello World"
+  messageCount = block:
+    FancyProgramFlags.expectThenElse(Count, fkInt):
+      it    # It is injected by getting the value
+    do:
+      3
+for x in 0..messageCount:
+  echo message
 ```
 The example's [html](https://www.jasonbeetham.com/commander/index.html)

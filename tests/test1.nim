@@ -1,28 +1,25 @@
 import unittest
 
 import commander
-document(Commander):
-  header: """
-This is a test program, to showcase the usage of commander.
-It allows quick generated documentation for CLI applications!"""
-  footer: """
-Code owned by Jason Beetham distributed under the MIT license,
-and really sweet code."""
+import std/terminal
+document(FancyProgram):
+  header: "This program does some fancy thing." # At start of documentation
+  footer: "Released under MIT license." # At end of documentation
   section Main:
-    header: "Some software made by Me!"
-    Printer: 
-      desc: "Amount of times to print a message."
-      flags: 
-        C: int
-        count: int
-    Help:
-      desc: "Prints this message."
+    header: "Main Section:" # At start of section
+    footer: "Cool stuff!" # At end of section
+    Help: # This emits an enum value apart of `FancyProgramEnum.Help`
       flags:
-        help
         h
-    PretendGC:
-      desc: "Chooses the GC read the docs for more."
+        help
+      desc: "Prints this message"
+    Count:
+      desc: "Prints hellow world COUNT times."
       flags:
-        gc: string
-    footer:
-      "This really is some silly stuff"
+        c: int # Can use `float`, `int` or `string`
+        count: int
+    EnableColor:
+      desc: "Enables terminal colour which makes the messages red."
+      flags:
+        color
+        cc

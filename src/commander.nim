@@ -24,7 +24,7 @@ type
       intVal*: int
     else: discard
 
-proc print*(doc: DocSection) = 
+proc print*(doc: DocSection) =
   echo doc.header
   var largestWidth = 0
   for entry in doc.entries: # Calculates the largest width for aligning
@@ -32,7 +32,7 @@ proc print*(doc: DocSection) =
     for flag in entry.flags:
       width += flag.len + 1
     largestWidth = max(largestWidth, width + 1)
-  
+
   for entry in doc.entries:
     var msg = ""
     for flag in entry.flags:
@@ -41,7 +41,7 @@ proc print*(doc: DocSection) =
     echo entry.description
   echo doc.footer
 
-proc print*(doc: CommandDoc) = 
+proc print*(doc: CommandDoc) =
   echo doc.name
   echo doc.header
   for section in doc.sections:
@@ -53,7 +53,7 @@ func toHtml*(sect: DocSection): string =
   result.add p(sect.header)
   var trs: string
   for entry in sect.entries:
-    let 
+    let
       flags = entry.flags.join(" ")
       linkName = "#" & sect.name & entry.name
     trs.add tr(td(a(href = linkName, flags)), td(entry.description))
@@ -67,13 +67,13 @@ func toHtml*(doc: CommandDoc): string =
     result.add sect.toHtml
   result.add p(doc.footer)
 
-func `[]`(doc: CommandDoc, str: string): DocSection = 
+func `[]`(doc: CommandDoc, str: string): DocSection =
   for sect in doc.sections:
     if sect.name == str:
       return sect
   raise newException(KeyError, "Key not found.")
 
-proc getKindParser(i: NimNode): (FlagKind, NimNode) = 
+proc getKindParser(i: NimNode): (FlagKind, NimNode) =
   if i.eqIdent("string"):
     (fkString, newEmptyNode())
   elif i.eqIdent("int"):
@@ -84,16 +84,15 @@ proc getKindParser(i: NimNode): (FlagKind, NimNode) =
     error("This DSL only accepts `int`, `float` or `strings`.")
     (fkNone, newEmptyNode())
 
-proc toFlag(s: string): string = 
-  result = 
-    if s.len == 1: 
-      "-" 
+proc toFlag(s: string): string =
+  result =
+    if s.len == 1:
+      "-"
     else: "--"
   result.add s
 
-
 macro document*(constName: untyped, body: untyped): untyped =
-  var 
+  var
     doc = CommandDoc(name: $constName)
     enumNames: seq[NimNode]
     searchBody = newStmtList()
@@ -103,11 +102,11 @@ macro document*(constName: untyped, body: untyped): untyped =
     enumName = ident($constName & "Enum")
   for section in body:
     if section[0].eqIdent("header"): # Found the doc header
-        doc.header = $section[1][0]
-        continue
+      doc.header = $section[1][0]
+      continue
     elif section[0].eqIdent("footer"): # Found the doc footer
-        doc.footer = $section[1][0]
-        continue
+      doc.footer = $section[1][0]
+      continue
     var docSect: DocSection
     docSect.name = $section[1] # The enum is the section name
     for entry in section[2]:
@@ -136,8 +135,8 @@ macro document*(constName: untyped, body: untyped): untyped =
                   searchBody.add quote do:
                     if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
                       if `pident`.val.len > 0:
-                          let strVal = `pident`.val
-                          `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, strVal: strVal).some
+                        let strVal = `pident`.val
+                        `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, strVal: strVal).some
                 of fkInt:
                   searchBody.add quote do:
                     if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
@@ -149,13 +148,13 @@ macro document*(constName: untyped, body: untyped): untyped =
                 of fkFloat:
                   searchBody.add quote do:
                     if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
-                        try:
-                          let floatVal = `pIdent`.val.`flagParser`
-                          `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, floatVal: floatVal).some
-                        except: discard
+                      try:
+                        let floatVal = `pIdent`.val.`flagParser`
+                        `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, floatVal: floatVal).some
+                      except: discard
                 else: discard
               else:
-                let 
+                let
                   flagName = $flag
                 flags.add flagName.toFlag
                 searchbody.add quote do:
@@ -167,7 +166,7 @@ macro document*(constName: untyped, body: untyped): untyped =
         assert flags.len != 0 and desc.len != 0
         docSect.entries.add DocEntry(name: $name, flags: flags, description: desc)
     doc.sections.add(docSect)
-  let 
+  let
     theConst = doc.newLit
     flags = ident($constName & "Flags")
     constName = ident($constName & "Doc")
@@ -184,3 +183,32 @@ macro document*(constName: untyped, body: untyped): untyped =
         if `pIdent`.kind == cmdEnd:
           break
       `resIdent`
+
+template expectThen*[E, T](flags: array[E, T], key: E, expectKind: static FlagKind,
+    body: untyped): untyped =
+  ## If the `key` matches the expected `kind` the body is invoked
+  ## Useful for toggling values.
+  if flags[key].isSome and flags[key].get.kind == expectKind:
+    when expectKind == fkInt:
+      let it{.inject.} = doc[key].get.intVal
+    elif expectKind == fkFloat:
+      let it{.inject.} = doc[key].get.floatVal
+    elif expectKind == fkString:
+      let it{.inject.} = doc[key].get.strVal
+    body
+template expectThenElse*[E, T](doc: array[E, T], key: E, expectKind: static FlagKind, body,
+    elseBody: untyped): untyped =
+  ## Template to make it easier to unpack the values.
+  ## Injects an `it` if the kind is not `fkNone`.
+  ## `body` occurs if the kind is the expected
+  ## `elsebody` occurs if the value wasnt present or kind didnt match.
+  if doc[key].isSome and doc[key].get.kind == expectKind:
+    when expectKind == fkInt:
+      let it{.inject.} = doc[key].get.intVal
+    elif expectKind == fkFloat:
+      let it{.inject.} = doc[key].get.floatVal
+    elif expectKind == fkString:
+      let it{.inject.} = doc[key].get.strVal
+    body
+  else:
+    elseBody

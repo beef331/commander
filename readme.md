@@ -32,3 +32,4 @@ if FancyProgramFlags[Count].isSome:
     for x in 0..<3: # Default value sorta.
       echo "Hello World"
 ```
+The example's [html](https://www.jasonbeetham.com/commander/index.html)

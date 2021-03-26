@@ -6,12 +6,18 @@ type
     description: string
     hasValue: bool
     shortFlags, longFlags: seq[string]
+
   DocSection = object
     header, footer: string # Appended before and after documentation
     entries: seq[DocEntry]
+
   Commander = object
     name, header, footer, currentSection: string
     sections: OrderedTable[string, DocSection]
+
+  Param = object
+    kind: CmdlineKind
+    key, val: string
 
 
 proc parse(str: string, T: typedesc): T =
@@ -34,19 +40,21 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
     hasValue = typ isnot void
   cmd.unsafeAddr[].sections[cmd.currentSection].entries.add DocEntry(description: desc,
       shortFlags: toSeq(short), longFlags: toSeq(long), hasValue: hasValue)
-  var parser = initOptParser()
-  for (kind, key, val) in parser.getopt:
-    if kind == cmdLongOption and isLong:
-      if key.nimIdentNormalize in long:
+  for flag in short:
+    if parseTable.hasKey(flag):
+      let param = parseTable[flag]
+      if param.kind == cmdShortOption and isShort:
         when typ isnot void and typ isnot string:
-          let it{.inject.} = parse(val, typ)
+          let it{.inject.} = parse(param.val, typ)
         elif typ is string:
           let it{.inject.} = val
         action
-    if kind == cmdShortOption and isShort:
-      if key in short:
+  for flag in long:
+    if parseTable.hasKey(flag):
+      let param = parseTable[flag]
+      if param.kind == cmdLongOption and isLong:
         when typ isnot void and typ isnot string:
-          let it{.inject.} = parse(val, typ)
+          let it{.inject.} = parse(param.val, typ)
         elif typ is string:
           let it{.inject.} = val
         action
@@ -79,7 +87,7 @@ proc section*(cmd: Commander, newSect, header, footer: string = "") =
 proc addCommander(node, cmderIdent: Nimnode) =
   node.insert 1, nnkExprEqExpr.newTree(ident("cmd"), cmderIdent)
 
-proc expandFlag(node: Nimnode) =
+proc expandFlag(node: NimNode) =
   var foundOptSymbols = {"short": false, "long": false, "desc": false, "typ": false}.toTable
   for expr in node:
     if expr.kind == nnkExprEqExpr:
@@ -108,7 +116,14 @@ macro genCommand*(cmdr: Commander, body: untyped): untyped =
       call.addCommander(cmdr)
     of "section", "header", "footer":
       call.addCommander(cmdr)
-  echo result.repr
+  let pTable = ident"parseTable"
+  result.insert 0, quote do:
+    var
+      `pTable`: Table[string, Param]
+      parser = initOptParser()
+    for kind, key, val in parser.getOpt():
+      `pTable`[key] = Param(kind: kind, key: key, val: val)
+  result = newBlockStmt(result)
 
 proc newLined(s: string): string {.inline.} = s & "\n"
 

@@ -15,10 +15,10 @@ type
 
 
 proc parse(str: string, T: typedesc): T =
-  when T is int:
-    parseInt(str)
-  elif T is float:
-    parseFloat(str)
+  when T is SomeInteger:
+    parseInt(str).T
+  elif T is SomeFloat:
+    parseFloat(str).T
   elif T is enum:
     parseEnum[T](str)
 

@@ -51,17 +51,19 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
           let it{.inject.} = val
         action
 
-proc header*(cmd: Commander, desc: string) {.inline.} =
-  if cmd.currentSection == "main":
-    cmd.unsafeAddr[].header = desc
-  else:
-    cmd.unsafeAddr[].sections[cmd.currentSection].header = desc
 
-proc footer*(cmd: Commander, desc: string) {.inline.} =
-  if cmd.currentSection == "main":
-    cmd.unsafeAddr[].footer = desc
-  else:
-    cmd.unsafeAddr[].sections[cmd.currentSection].footer = desc
+proc header*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].header = desc
+
+proc footer*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].footer = desc
+
+
+proc header*(cmd: Commander, section, desc: string) {.inline.} =
+  if cmd.sections.hasKey(section):
+    cmd.unsafeAddr[].sections[section].header = desc
+
+proc footer*(cmd: Commander, section, desc: string) {.inline.} =
+  if cmd.sections.hasKey(section):
+    cmd.unsafeAddr[].sections[section].footer = desc
 
 proc section*(cmd: Commander, newSect, header, footer: string = "") =
   # When empty returns to "main"
@@ -172,7 +174,6 @@ when isMainModule:
 
   genCommand(cmd):
     header("This is a great little program, that stands for great things")
-    footer("That's all")
     section("Otherly", "This part does some cooool stuff", "That was all the cool stuff it did")
     flag(short = "c", long = ["count", "countAlias"], desc = "Super fancy int math, totally rad.", typ = int):
       config.countTotal += it # `it` is converted from input flag value to the provided `typ` (`int` in this case)
@@ -192,3 +193,4 @@ when isMainModule:
       echo message
     flag(long = "bleep1", desc = "do bleep1", action = echo "bleep1")
     flag(long = "bleep2", desc = "do bleep2", action = echo "bleep2")
+    footer("That's all")

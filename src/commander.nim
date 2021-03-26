@@ -1,214 +1,190 @@
-import std/[macros, strutils, htmlgen, parseopt, options]
-export parseopt, strutils, options
+import std/[macros, strutils, htmlgen, parseopt, tables, terminal, strformat, sequtils]
+export parseopt, strutils
 
 type
-  DocEntry* = object
-    name*, description*: string
-    flags*: seq[string]
-  DocSection* = object
-    name*, header*, footer*: string # Appended before and after documentation
-    entries*: seq[DocEntry]
-  CommandDoc* = object
-    name*, header*, footer*: string
-    sections*: seq[DocSection]
-  FlagKind* = enum
-    fkNone, fkString, fkFloat, fkInt
+  DocEntry = object
+    description: string
+    hasValue: bool
+    shortFlags, longFlags: seq[string]
+  DocSection = object
+    header, footer: string # Appended before and after documentation
+    entries: seq[DocEntry]
+  Commander = object
+    name, header, footer, currentSection: string
+    sections: OrderedTable[string, DocSection]
 
-  FlagValue* = object
-    case kind*: FlagKind
-    of fkString:
-      strVal*: string
-    of fkFloat:
-      floatVal*: float
-    of fkInt:
-      intVal*: int
-    else: discard
 
-proc print*(doc: DocSection) =
-  echo doc.header
-  var largestWidth = 0
-  for entry in doc.entries: # Calculates the largest width for aligning
-    var width = 0
-    for flag in entry.flags:
-      width += flag.len + 1
-    largestWidth = max(largestWidth, width + 1)
+proc parse(str: string, T: typedesc): T =
+  when T is int:
+    parseInt(str)
+  elif T is float:
+    parseFloat(str)
+  elif T is enum:
+    parseEnum[T](str)
 
-  for entry in doc.entries:
-    var msg = ""
-    for flag in entry.flags:
-      msg.add flag & " "
-    stdout.write msg.alignLeft(largestWidth)
-    echo entry.description
-  echo doc.footer
+proc initCommander*(): Commander =
+  result.currentSection = "main"
+  result.sections[result.currentSection] = DocSection()
 
-proc print*(doc: CommandDoc) =
-  echo doc.name
-  echo doc.header
-  for section in doc.sections:
-    section.print()
-  echo doc.footer
+template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string = "",
+    typ: type = void, action: untyped) =
+  let
+    isLong = long.len > 0
+    isShort = short.len > 0
+    hasValue = typ isnot void
+  cmd.unsafeAddr[].sections[cmd.currentSection].entries.add DocEntry(description: desc,
+      shortFlags: toSeq(short), longFlags: toSeq(long), hasValue: hasValue)
+  var parser = initOptParser()
+  for (kind, key, val) in parser.getopt:
+    if kind == cmdLongOption and isLong:
+      if key.nimIdentNormalize in long:
+        when typ isnot void:
+          let it{.inject.} = parse(val, typ)
+        action
+    if kind == cmdShortOption and isShort:
+      if key in short:
+        when typ isnot void:
+          let it{.inject.} = parse(val, typ)
+        action
 
-func toHtml*(sect: DocSection): string =
-  result.add h1(a(href = ("#" & sect.name), sect.name))
-  result.add p(sect.header)
-  var trs: string
-  for entry in sect.entries:
-    let
-      flags = entry.flags.join(" ")
-      linkName = "#" & sect.name & entry.name
-    trs.add tr(td(a(href = linkName, flags)), td(entry.description))
-  result.add table(trs)
-  result.add p(sect.footer)
-
-func toHtml*(doc: CommandDoc): string =
-  result.add h1(doc.name)
-  result.add p(doc.header)
-  for sect in doc.sections:
-    result.add sect.toHtml
-  result.add p(doc.footer)
-
-func `[]`(doc: CommandDoc, str: string): DocSection =
-  for sect in doc.sections:
-    if sect.name == str:
-      return sect
-  raise newException(KeyError, "Key not found.")
-
-proc getKindParser(i: NimNode): (FlagKind, NimNode) =
-  if i.eqIdent("string"):
-    (fkString, newEmptyNode())
-  elif i.eqIdent("int"):
-    (fkInt, ident("parseInt"))
-  elif i.eqIdent("float"):
-    (fkFloat, ident("parseFloat"))
+proc header*(cmd: Commander, desc: string) {.inline.} =
+  if cmd.currentSection == "main":
+    cmd.unsafeAddr[].header = desc
   else:
-    error("This DSL only accepts `int`, `float` or `strings`.")
-    (fkNone, newEmptyNode())
+    cmd.unsafeAddr[].sections[cmd.currentSection].header = desc
 
-proc toFlag(s: string): string =
-  result =
-    if s.len == 1:
-      "-"
-    else: "--"
-  result.add s
+proc footer*(cmd: Commander, desc: string) {.inline.} =
+  if cmd.currentSection == "main":
+    cmd.unsafeAddr[].footer = desc
+  else:
+    cmd.unsafeAddr[].sections[cmd.currentSection].footer = desc
 
-macro document*(constName: untyped, body: untyped): untyped =
+proc section*(cmd: Commander, newSect, header, footer: string = "") =
+  # When empty returns to "main"
+  cmd.unsafeAddr[].currentSection =
+    if newSect.len == 0:
+      "main"
+    else:
+      discard cmd.unsafeaddr[].sections.hasKeyorPut(newSect, DocSection())
+      cmd.unsafeaddr[].sections[newSect].header = header
+      cmd.unsafeaddr[].sections[newSect].footer = footer
+      newSect
+
+proc addCommander(node, cmderIdent: Nimnode) =
+  node.insert 1, nnkExprEqExpr.newTree(ident("cmd"), cmderIdent)
+
+proc expandFlag(node: Nimnode) =
+  var foundOptSymbols = {"short": false, "long": false, "desc": false, "typ": false}.toTable
+  for expr in node:
+    if expr.kind == nnkExprEqExpr:
+      foundOptSymbols[($expr[0]).nimIdentNormalize] = true
+      if expr[1].kind == nnkStrLit and (expr[0].eqIdent("short") or expr[0].eqIdent("long")):
+        expr[1] = nnkBracket.newNimNode.add(expr[1])
+  for (key, value) in foundOptSymbols.pairs:
+    if not value:
+      let lit =
+        case key:
+        of "typ":
+          quote do:
+            typedesc[void]
+        of "desc":
+          newLit("")
+        else:
+          newLit(newSeq[string](0))
+      node.insert 1, nnkExprEqExpr.newTree(ident(key), lit)
+
+macro genCommand*(cmdr: Commander, body: untyped): untyped =
+  result = body
+  for call in result:
+    case $call[0]:
+    of "flag":
+      call.expandFlag
+      call.addCommander(cmdr)
+    of "section", "header", "footer":
+      call.addCommander(cmdr)
+  echo result.repr
+
+proc newLined(s: string): string {.inline.} = s & "\n"
+
+proc toFlag(s: string): string {.inline.} =
+  if s.len == 1:
+    fmt"-{s} "
+  else:
+    fmt"--{s} "
+
+proc toValue(s: string, valSep = '='): string {.inline.} =
+  if s.len == 1:
+    fmt"-{s}{valSep}{s.toUpperAscii} "
+  else:
+    fmt"--{s}{valSep}{s.toUpperAscii} "
+
+proc toCli*(docSect: DocSection, valsep = '='): string =
+  if docSect.header.len > 0:
+    result.add docSect.header.newLined
   var
-    doc = CommandDoc(name: $constName)
-    enumNames: seq[NimNode]
-    searchBody = newStmtList()
-  let
-    pIdent = ident("p")
-    resIdent = ident("res")
-    enumName = ident($constName & "Enum")
-  for section in body:
-    if section[0].eqIdent("header"): # Found the doc header
-      doc.header = $section[1][0]
-      continue
-    elif section[0].eqIdent("footer"): # Found the doc footer
-      doc.footer = $section[1][0]
-      continue
-    var docSect: DocSection
-    docSect.name = $section[1] # The enum is the section name
-    for entry in section[2]:
-      if entry[0].eqIdent("header"): # Found the section header
-        docSect.header = $entry[1][0]
-      elif entry[0].eqIdent("footer"): # Found the section footer
-        docSect.footer = $entry[1][0]
+    longest = 0
+    messages: seq[string]
+  for ent in docSect.entries:
+    var message = ""
+    for flag in ent.shortFlags:
+      if ent.hasValue:
+        message.add flag.toValue
       else:
-        let name = entry[0]
-        enumNames.add name
-        var
-          flags: seq[string]
-          desc: string
-        assert entry[1].len == 2
-        for field in entry[1]:
-          if field[0].eqIdent("flags"):
-            for flag in field[1]: # Gets all flags and adds logic to search/parse them to the array
-              if flag.len > 0:
-                let
-                  flagName = $flag[0]
-                  (flagType, flagParser) = getKindParser(flag[1][0])
-                  flagTypeLit = flagType.newLit
-                flags.add flagName.toFlag & "=" & (flagName).toUpperAscii
-                case flagType:
-                of fkString:
-                  searchBody.add quote do:
-                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
-                      if `pident`.val.len > 0:
-                        let strVal = `pident`.val
-                        `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, strVal: strVal).some
-                of fkInt:
-                  searchBody.add quote do:
-                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
-                      if `pident`.val.len > 0:
-                        try:
-                          let intVal = `pIdent`.val.`flagParser`
-                          `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, intVal: intVal).some
-                        except: discard
-                of fkFloat:
-                  searchBody.add quote do:
-                    if `pIdent`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
-                      try:
-                        let floatVal = `pIdent`.val.`flagParser`
-                        `resIdent`[`name`] = FlagValue(kind: `flagTypeLit`, floatVal: floatVal).some
-                      except: discard
-                else: discard
-              else:
-                let
-                  flagName = $flag
-                flags.add flagName.toFlag
-                searchbody.add quote do:
-                  if `pident`.key.nimIdentNormalize == `flagName`.nimIdentNormalize:
-                    `resIdent`[`name`] = FlagValue(kind: fkNone).some
+        message.add flag.toFlag
+    for flag in ent.longFlags:
+      if ent.hasValue:
+        message.add flag.toValue
+      else:
+        message.add flag.toFlag
+    longest = max(longest, message.len + 1)
+    messages.add message
+  for i, msg in messages:
+    result.add msg.alignLeft(longest) & docSect.entries[i].description.newLined
 
-          if field[0].eqIdent("desc"): # Found the section description
-            desc = $field[1][0]
-        assert flags.len != 0 and desc.len != 0
-        docSect.entries.add DocEntry(name: $name, flags: flags, description: desc)
-    doc.sections.add(docSect)
+  if docSect.footer.len > 0:
+    result.add docSect.footer.newLined
+
+proc toCli*(cmdr: Commander, valSep = '='): string =
+  result.add cmdr.name.newLined
+  result.add cmdr.header.newLined
+  if cmdr.sections.hasKey("main"):
+    result.add cmdr.sections["main"].toCli(valSep)
+  for key in cmdr.sections.keys:
+    if key != "main":
+      result.add cmdr.sections[key].toCli(valSep)
+  result.add cmdr.footer.newLined
+
+when isMainModule:
+  import std/terminal
+  type Config = ref object
+    useColor: bool
+    color: ForegroundColor
+    countTotal: int
+
+
   let
-    theConst = doc.newLit
-    flags = ident($constName & "Flags")
-    constName = ident($constName & "Doc")
-  result = nnkStmtList.newTree newEnum(enumName, enumNames, true, true)
-  result.add quote do:
-    const `constName`* = `theConst`
-    let `flags` = block:
-      var
-        `resIdent`: array[`enumName`, Option[FlagValue]]
-        `pIdent` = initOptParser()
-      while true:
-        `pIdent`.next
-        `searchBody`
-        if `pIdent`.kind == cmdEnd:
-          break
-      `resIdent`
+    config = Config()
+    cmd = initCommander()
 
-template hasThen*[E, T](flags: array[E, T], key: E, expectKind: static FlagKind,
-    body: untyped): untyped =
-  ## If the `key` matches the expected `kind` the body is invoked
-  ## Useful for toggling values.
-  if flags[key].isSome and flags[key].get.kind == expectKind:
-    when expectKind == fkInt:
-      let it{.inject.} = doc[key].get.intVal
-    elif expectKind == fkFloat:
-      let it{.inject.} = doc[key].get.floatVal
-    elif expectKind == fkString:
-      let it{.inject.} = doc[key].get.strVal
-    body
-template hasThenElse*[E, T](doc: array[E, T], key: E, expectKind: static FlagKind, body,
-    elseBody: untyped): untyped =
-  ## Template to make it easier to unpack the values.
-  ## Injects an `it` if the kind is not `fkNone`.
-  ## `body` occurs if the kind is the expected
-  ## `elsebody` occurs if the value wasnt present or kind didnt match.
-  if doc[key].isSome and doc[key].get.kind == expectKind:
-    when expectKind == fkInt:
-      let it{.inject.} = doc[key].get.intVal
-    elif expectKind == fkFloat:
-      let it{.inject.} = doc[key].get.floatVal
-    elif expectKind == fkString:
-      let it{.inject.} = doc[key].get.strVal
-    body
-  else:
-    elseBody
+  genCommand(cmd):
+    header("This is a great little program, that stands for great things")
+    footer("That's all")
+    section("Otherly", "This part does some cooool stuff", "That was all the cool stuff it did")
+    flag(short = "c", long = ["count", "countAlias"], desc = "Super fancy int math, totally rad.", typ = int):
+      config.countTotal += it # `it` is converted from input flag value to the provided `typ` (`int` in this case)
+    flag(long = "color", desc = "Chooses the colour to output in the terminal.",
+        typ = ForegroundColor):
+      case it
+      of fgRed: discard
+      else:
+        config.color = it
+        config.useColor = true
+    flag(long = "help", desc = "Shows this message."):
+      let message =
+        if config.useColor:
+          ansiForegroundColorCode(config.color) & cmd.toCli & ansiResetCode
+        else:
+          cmd.toCli
+      echo message
+    flag(long = "bleep1", desc = "do bleep1", action = echo "bleep1")
+    flag(long = "bleep2", desc = "do bleep2", action = echo "bleep2")

@@ -11,7 +11,7 @@ type
     name, header, footer: string # Appended before and after documentation
     entries: seq[DocEntry]
 
-  Commander = object
+  Commander* = object
     name, header, footer, currentSection: string
     sections: OrderedTable[string, DocSection]
 
@@ -29,7 +29,7 @@ proc parse(str: string, T: typedesc): T =
     parseEnum[T](str)
 
 proc initCommander*(): Commander =
-  result.currentSection = "main"
+  result.currentSection = "Main"
   result.sections[result.currentSection] = DocSection()
 
 template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string = "",
@@ -75,15 +75,14 @@ proc footer*(cmd: var Commander, section, desc: string) {.inline.} =
     cmd.sections[section].footer = desc
 
 proc section*(cmd: var Commander, newSect, header, footer: string = "") =
-  # When empty returns to "main"
+  ## When `newSect` is empty returns to "Main"
   cmd.currentSection =
     if newSect.len == 0:
-      "main"
+      "Main"
     else:
-      discard cmd.sections.hasKeyorPut(newSect, DocSection())
-      cmd.sections[newSect].header = header
-      cmd.sections[newSect].footer = footer
-      cmd.sections[newSect].name = newSect
+      discard cmd.sections.hasKeyorPut(newSect, DocSection(name: newSect))
+      if header.len > 0: cmd.sections[newSect].header = header
+      if footer.len > 0: cmd.sections[newSect].footer = footer
       newSect
 
 proc addCommander(node, cmderIdent: Nimnode) =
@@ -146,6 +145,8 @@ proc toValue(s: string, valSep = '='): string {.inline.} =
     fmt"--{s}{valSep}{s.toUpperAscii} "
 
 proc toCli*(docSect: DocSection, valsep = '='): string =
+  if docSect.name != "Main":
+    result.add docSect.name.newLined
   if docSect.header.len > 0:
     result.add docSect.header.newLined
   var
@@ -174,11 +175,11 @@ proc toCli*(docSect: DocSection, valsep = '='): string =
 proc toCli*(cmdr: Commander, valSep = '='): string =
   result.add cmdr.name.newLined
   result.add cmdr.header.newLined
-  if cmdr.sections.hasKey("main"):
-    result.add cmdr.sections["main"].toCli(valSep)
+  if cmdr.sections.hasKey("Main"):
+    result.add cmdr.sections["Main"].toCli(valSep).newLined
   for key in cmdr.sections.keys:
-    if key != "main":
-      result.add cmdr.sections[key].toCli(valSep)
+    if key != "Main":
+      result.add cmdr.sections[key].toCli(valSep).newLined
   result.add cmdr.footer.newLined
 
 
@@ -211,10 +212,10 @@ proc toHtml(sect: DocSection, valSep = '='): string =
 proc toHtml*(cmdr: Commander, valSep = '='): string =
   result.add h1(cmdr.name)
   result.add p(cmdr.header)
-  if cmdr.sections.hasKey("main"):
-    result.add cmdr.sections["main"].toHtml(valSep)
+  if cmdr.sections.hasKey("Main"):
+    result.add cmdr.sections["Main"].toHtml(valSep)
   for key in cmdr.sections.keys:
-    if key != "main":
+    if key != "Main":
       result.add cmdr.sections[key].toHtml(valSep)
   result.add p(cmdr.footer)
 

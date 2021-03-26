@@ -38,13 +38,17 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
   for (kind, key, val) in parser.getopt:
     if kind == cmdLongOption and isLong:
       if key.nimIdentNormalize in long:
-        when typ isnot void:
+        when typ isnot void and typ isnot string:
           let it{.inject.} = parse(val, typ)
+        elif typ is string:
+          let it{.inject.} = val
         action
     if kind == cmdShortOption and isShort:
       if key in short:
-        when typ isnot void:
+        when typ isnot void and typ isnot string:
           let it{.inject.} = parse(val, typ)
+        elif typ is string:
+          let it{.inject.} = val
         action
 
 proc header*(cmd: Commander, desc: string) {.inline.} =

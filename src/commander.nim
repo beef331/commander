@@ -38,7 +38,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
     isLong = long.len > 0
     isShort = short.len > 0
     hasValue = typ isnot void
-  cmd.unsafeAddr[].sections[cmd.currentSection].entries.add DocEntry(description: desc,
+  cmd.sections[cmd.currentSection].entries.add DocEntry(description: desc,
       shortFlags: toSeq(short), longFlags: toSeq(long), hasValue: hasValue)
   for flag in short:
     if parseTable.hasKey(flag):
@@ -60,30 +60,30 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         action
 
 
-proc header*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].header = desc
+proc header*(cmd: var Commander, desc: string) {.inline.} = cmd.header = desc
 
-proc footer*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].footer = desc
-proc name*(cmd: Commander, name: string) {.inline.} = cmd.unsafeAddr[].name = name
+proc footer*(cmd: var Commander, desc: string) {.inline.} = cmd.footer = desc
+proc name*(cmd: var Commander, name: string) {.inline.} = cmd.name = name
 
 
-proc header*(cmd: Commander, section, desc: string) {.inline.} =
+proc header*(cmd: var Commander, section, desc: string) {.inline.} =
   if cmd.sections.hasKey(section):
-    cmd.unsafeAddr[].sections[section].header = desc
+    cmd.sections[section].header = desc
 
-proc footer*(cmd: Commander, section, desc: string) {.inline.} =
+proc footer*(cmd: var Commander, section, desc: string) {.inline.} =
   if cmd.sections.hasKey(section):
-    cmd.unsafeAddr[].sections[section].footer = desc
+    cmd.sections[section].footer = desc
 
-proc section*(cmd: Commander, newSect, header, footer: string = "") =
+proc section*(cmd: var Commander, newSect, header, footer: string = "") =
   # When empty returns to "main"
-  cmd.unsafeAddr[].currentSection =
+  cmd.currentSection =
     if newSect.len == 0:
       "main"
     else:
-      discard cmd.unsafeaddr[].sections.hasKeyorPut(newSect, DocSection())
-      cmd.unsafeaddr[].sections[newSect].header = header
-      cmd.unsafeaddr[].sections[newSect].footer = footer
-      cmd.unsafeaddr[].sections[newSect].name = newSect
+      discard cmd.sections.hasKeyorPut(newSect, DocSection())
+      cmd.sections[newSect].header = header
+      cmd.sections[newSect].footer = footer
+      cmd.sections[newSect].name = newSect
       newSect
 
 proc addCommander(node, cmderIdent: Nimnode) =
@@ -111,20 +111,24 @@ proc expandFlag(node: NimNode) =
 
 macro genCommand*(cmdr: Commander, body: untyped): untyped =
   result = body
+  let cmd = ident($cmdr)
   for call in result:
     case $call[0]:
     of "flag":
       call.expandFlag
-      call.addCommander(cmdr)
+      call.addCommander(cmd)
     of "section", "header", "footer", "name":
-      call.addCommander(cmdr)
+      call.addCommander(cmd)
   let pTable = ident"parseTable"
   result.insert 0, quote do:
     var
+      `cmd` = `cmdr`
       `pTable`: Table[string, Param]
       parser = initOptParser()
     for kind, key, val in parser.getOpt():
       `pTable`[key] = Param(kind: kind, key: key, val: val)
+  result.add quote do:
+    `cmdr`.unsafeAddr[] = `cmd`
   result = newBlockStmt(result)
 
 proc newLined(s: string): string {.inline.} = s & "\n"

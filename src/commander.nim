@@ -8,7 +8,7 @@ type
     shortFlags, longFlags: seq[string]
 
   DocSection = object
-    header, footer: string # Appended before and after documentation
+    name, header, footer: string # Appended before and after documentation
     entries: seq[DocEntry]
 
   Commander = object
@@ -63,6 +63,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
 proc header*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].header = desc
 
 proc footer*(cmd: Commander, desc: string) {.inline.} = cmd.unsafeAddr[].footer = desc
+proc name*(cmd: Commander, name: string) {.inline.} = cmd.unsafeAddr[].name = name
 
 
 proc header*(cmd: Commander, section, desc: string) {.inline.} =
@@ -82,6 +83,7 @@ proc section*(cmd: Commander, newSect, header, footer: string = "") =
       discard cmd.unsafeaddr[].sections.hasKeyorPut(newSect, DocSection())
       cmd.unsafeaddr[].sections[newSect].header = header
       cmd.unsafeaddr[].sections[newSect].footer = footer
+      cmd.unsafeaddr[].sections[newSect].name = newSect
       newSect
 
 proc addCommander(node, cmderIdent: Nimnode) =
@@ -114,7 +116,7 @@ macro genCommand*(cmdr: Commander, body: untyped): untyped =
     of "flag":
       call.expandFlag
       call.addCommander(cmdr)
-    of "section", "header", "footer":
+    of "section", "header", "footer", "name":
       call.addCommander(cmdr)
   let pTable = ident"parseTable"
   result.insert 0, quote do:
@@ -149,12 +151,12 @@ proc toCli*(docSect: DocSection, valsep = '='): string =
     var message = ""
     for flag in ent.shortFlags:
       if ent.hasValue:
-        message.add flag.toValue
+        message.add flag.toValue valSep
       else:
         message.add flag.toFlag
     for flag in ent.longFlags:
       if ent.hasValue:
-        message.add flag.toValue
+        message.add flag.toValue valSep
       else:
         message.add flag.toFlag
     longest = max(longest, message.len + 1)
@@ -175,6 +177,43 @@ proc toCli*(cmdr: Commander, valSep = '='): string =
       result.add cmdr.sections[key].toCli(valSep)
   result.add cmdr.footer.newLined
 
+
+proc toHtml(entry: DocEntry, valSep = '='): string =
+  var message = ""
+  for flag in entry.shortFlags:
+    if entry.hasValue:
+      message.add flag.toValue valSep
+    else:
+      message.add flag.toFlag
+  for flag in entry.longFlags:
+    if entry.hasValue:
+      message.add flag.toValue valSep
+    else:
+      message.add flag.toFlag
+  let tag = fmt"#{entry.longFlags.join}{entry.shortFlags.join}"
+  result.add tr(td(a(href = tag, message)), td(entry.description))
+
+
+proc toHtml(sect: DocSection, valSep = '='): string =
+  result.add h2(a(href = "#" & sect.name, sect.name))
+  result.add p(sect.header)
+  var tableVals = ""
+  for ent in sect.entries:
+    tableVals.add ent.toHtml valSep
+  result.add table(tableVals)
+  result.add p(sect.footer)
+
+
+proc toHtml*(cmdr: Commander, valSep = '='): string =
+  result.add h1(cmdr.name)
+  result.add p(cmdr.header)
+  if cmdr.sections.hasKey("main"):
+    result.add cmdr.sections["main"].toHtml(valSep)
+  for key in cmdr.sections.keys:
+    if key != "main":
+      result.add cmdr.sections[key].toHtml(valSep)
+  result.add p(cmdr.footer)
+
 when isMainModule:
   import std/terminal
   type Config = ref object
@@ -188,10 +227,11 @@ when isMainModule:
     cmd = initCommander()
 
   genCommand(cmd):
+    name("Super Cool CLI")
     header("This is a great little program, that stands for great things")
     section("Otherly", "This part does some cooool stuff", "That was all the cool stuff it did")
     flag(short = "c", long = ["count", "countAlias"], desc = "Super fancy int math, totally rad.", typ = int):
-      config.countTotal += it # `it` is converted from input flag value to the provided `typ` (`int` in this case)
+      config.countTotal += it
     flag(long = "color", desc = "Chooses the colour to output in the terminal.",
         typ = ForegroundColor):
       case it
@@ -199,7 +239,7 @@ when isMainModule:
       else:
         config.color = it
         config.useColor = true
-    flag(long = "help", desc = "Shows this message."):
+    flag(long = "help", desc = "Shows the help message."):
       let message =
         if config.useColor:
           ansiForegroundColorCode(config.color) & cmd.toCli & ansiResetCode
@@ -209,3 +249,4 @@ when isMainModule:
     flag(long = "bleep1", desc = "do bleep1", action = echo "bleep1")
     flag(long = "bleep2", desc = "do bleep2", action = echo "bleep2")
     footer("That's all")
+  writeFile("index.html", cmd.toHtml)

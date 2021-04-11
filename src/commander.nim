@@ -175,16 +175,19 @@ proc toCli*(docSect: DocSection, valsep = '='): string =
     messages: seq[string]
   for ent in docSect.entries:
     var message = ""
-    for flag in ent.shortFlags:
-      if ent.hasValue:
-        message.add flag.toValue valSep
-      else:
-        message.add flag.toFlag
-    for flag in ent.longFlags:
-      if ent.hasValue:
-        message.add flag.toValue valSep
-      else:
-        message.add flag.toFlag
+    if ent.isArgument:
+      message.add ent.argument
+    else:
+      for flag in ent.shortFlags:
+        if ent.hasValue:
+          message.add flag.toValue valSep
+        else:
+          message.add flag.toFlag
+      for flag in ent.longFlags:
+        if ent.hasValue:
+          message.add flag.toValue valSep
+        else:
+          message.add flag.toFlag
     longest = max(longest, message.len + 1)
     messages.add message
   for i, msg in messages:
@@ -205,19 +208,23 @@ proc toCli*(cmdr: Commander, valSep = '='): string =
 
 
 proc toHtml(entry: DocEntry, valSep = '='): string =
-  var message = ""
-  for flag in entry.shortFlags:
-    if entry.hasValue:
-      message.add flag.toValue valSep
-    else:
-      message.add flag.toFlag
-  for flag in entry.longFlags:
-    if entry.hasValue:
-      message.add flag.toValue valSep
-    else:
-      message.add flag.toFlag
-  let tag = fmt"#{entry.longFlags.join}{entry.shortFlags.join}"
-  result.add tr(td(a(href = tag, message)), td(entry.description))
+  if entry.isArgument:
+    let tag = fmt"#argument{entry.argument}"
+    result.add tr(td(a(href = tag, entry.argument)), td(entry.description))
+  else:
+    var message = ""
+    for flag in entry.shortFlags:
+      if entry.hasValue:
+        message.add flag.toValue valSep
+      else:
+        message.add flag.toFlag
+    for flag in entry.longFlags:
+      if entry.hasValue:
+        message.add flag.toValue valSep
+      else:
+        message.add flag.toFlag
+    let tag = fmt"#{entry.longFlags.join}{entry.shortFlags.join}"
+    result.add tr(td(a(href = tag, message)), td(entry.description))
 
 
 proc toHtml(sect: DocSection, valSep = '='): string =

@@ -5,7 +5,12 @@ type
   DocEntry = object
     description: string
     hasValue: bool
-    shortFlags, longFlags: seq[string]
+    case isArgument: bool
+    of true:
+      argument: string
+    else:
+      shortFlags, longFlags: seq[string]
+
 
   DocSection = object
     name, header, footer: string # Appended before and after documentation
@@ -14,6 +19,7 @@ type
   Commander* = object
     name, header, footer, currentSection: string
     sections: OrderedTable[string, DocSection]
+    argumentPos: int
 
   Param = object
     kind: CmdlineKind
@@ -39,7 +45,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
     isShort = short.len > 0
     hasValue = typ isnot void
   cmd.sections[cmd.currentSection].entries.add DocEntry(description: desc,
-      shortFlags: toSeq(short), longFlags: toSeq(long), hasValue: hasValue)
+      shortFlags: toSeq(short), longFlags: toSeq(long), hasValue: hasValue, isArgument: false)
   for flag in short:
     if parseTable.hasKey(flag):
       let param = parseTable[flag]
@@ -58,6 +64,18 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         elif typ is string:
           let it{.inject.} = param.val
         action
+
+template arg*(cmd: Commander, name: string, desc: string = "", pos: int, typ = void, onGet: untyped) =
+  cmd[cmd.currentSection].entries.add(DocEntry(description: desc, isArgument: true, argument))
+  block search:
+    var found = 0
+    for x, y in parsetable.pairs:
+      if y.kind == cmdArgument:
+        if found == pos:
+          let it{.inject.} = parse[typ](y.val)
+          `onGet`
+        inc found
+
 
 
 proc header*(cmd: var Commander, desc: string) {.inline.} = cmd.header = desc
@@ -116,7 +134,7 @@ macro genCommand*(cmdr: Commander, body: untyped): untyped =
     of "flag":
       call.expandFlag
       call.addCommander(cmd)
-    of "section", "header", "footer", "name":
+    of "section", "header", "footer", "name", "arg":
       call.addCommander(cmd)
   let pTable = ident"parseTable"
   result.insert 0, quote do:

@@ -66,13 +66,16 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         action
 
 template arg*(cmd: Commander, name: string, desc: string = "", pos: int, typ = void, onGet: untyped) =
-  cmd[cmd.currentSection].entries.add(DocEntry(description: desc, isArgument: true, argument))
+  cmd.sections[cmd.currentSection].entries.add(DocEntry(description: desc, isArgument: true, argument: name))
   block search:
     var found = 0
     for x, y in parsetable.pairs:
       if y.kind == cmdArgument:
         if found == pos:
-          let it{.inject.} = parse[typ](y.val)
+          when typ isnot void and typ isnot string:
+            let it{.inject.} = parse(y.key, typ)
+          elif typ is string:
+            let it{.inject.} = y.key
           `onGet`
         inc found
 

@@ -1,5 +1,5 @@
 import std/[macros, strutils, htmlgen, parseopt, tables, terminal, strformat, sequtils]
-export parseopt, strutils
+export parseopt, strutils, strformat
 
 type
   DocEntry = object

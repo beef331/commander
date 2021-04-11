@@ -66,7 +66,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         action
 
 template arg*(cmd: Commander, name: string, desc: string = "", pos: int, typ = void, onGet: untyped) =
-  cmd.sections[cmd.currentSection].entries.add(DocEntry(description: desc, isArgument: true, argument: name))
+  cmd.sections[cmd.currentSection].entries.add(DocEntry(description: desc & fmt" Argument Pos: {pos}.", isArgument: true, argument: name))
   block search:
     var found = 0
     for x, y in parsetable.pairs:

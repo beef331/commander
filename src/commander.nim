@@ -47,7 +47,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         when typ isnot void and typ isnot string:
           let it{.inject.} = parse(param.val, typ)
         elif typ is string:
-          let it{.inject.} = val
+          let it{.inject.} = param.val
         action
   for flag in long:
     if parseTable.hasKey(flag):
@@ -56,7 +56,7 @@ template flag*(cmd: Commander, short, long: openArray[string] = [], desc: string
         when typ isnot void and typ isnot string:
           let it{.inject.} = parse(param.val, typ)
         elif typ is string:
-          let it{.inject.} = val
+          let it{.inject.} = param.val
         action
 
 
